@@ -1,5 +1,5 @@
--- crash.lua
--- credits goes to piwiii2.00
+-- StressTestHUD_Final.lua
+-- LocalScript pour tests privés : optimisé pour stress-tester un serveur privé Roblox jusqu'au lag/crash
 -- 2025
 -- WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
 
@@ -15,47 +15,49 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- ======================
 -- CONFIG
 -- ======================
-local REMOTE_NAME = "TestEvent" 
+local REMOTE_NAME = "TestEvent" -- Remote cible (sera créé s'il n'existe pas)
 local LEVELS = {
     Easy = {eventsPerHeartbeat = 10,  fireClick = false, consoleSpam = false, instanceSpam = false, networkBomb = false, cubeSpawn = false, itemSpam = false},
     Mid  = {eventsPerHeartbeat = 100, fireClick = true,  consoleSpam = true,  instanceSpam = false, networkBomb = false, cubeSpawn = false, itemSpam = false},
     Hard = {eventsPerHeartbeat = 500, fireClick = true,  consoleSpam = true,  instanceSpam = true,  networkBomb = true,  cubeSpawn = true,  itemSpam = true},
     Crash= {eventsPerHeartbeat = 1000,fireClick = true,  consoleSpam = true,  instanceSpam = true,  networkBomb = true,  cubeSpawn = true,  itemSpam = true}, -- Niveau pour crash intensif
 }
-local currentLevel = "Mid"     
-local ALLOW_FIRE = true        
-local ALLOW_INSTANCE_SPAM = false 
-local ALLOW_NETWORK_BOMB = false  
-local ALLOW_CUBE_SPAWN = false    
-local ALLOW_ITEM_SPAM = false     
-local EMERGENCY_THRESHOLD_PER_SEC = 15000 
-local MAX_RUNTIME_SECONDS = 30    
-local NETWORK_BOMB_TABLE_SIZE = 500 
-local NETWORK_BOMB_TRIES = 3       
-local INSTANCE_SPAM_DELAY = 0.005  
-local CUBE_SPAWN_DELAY = 0.005     
-local ITEM_SPAM_DELAY = 0.005      
-local ITEM_SPAM_NUM_TOOLS = 50     
-local PHYSICS_STRESS = true       
+local currentLevel = "Mid"     -- Valeur initiale: "Easy", "Mid", "Hard", "Crash"
+local ALLOW_FIRE = true        -- Permet fireclickdetector si true
+local ALLOW_INSTANCE_SPAM = false -- Toggle pour spam d'instances
+local ALLOW_NETWORK_BOMB = false  -- Toggle pour bombe réseau
+local ALLOW_CUBE_SPAWN = false    -- Toggle pour spawn de pièces cubiques
+local ALLOW_ITEM_SPAM = false     -- Toggle pour spam d'items
+local EMERGENCY_THRESHOLD_PER_SEC = 15000 -- Seuil local pour arrêt automatique
+local MAX_RUNTIME_SECONDS = 30    -- Limite à 30s pour éviter surcharge prolongée
+local NETWORK_BOMB_TABLE_SIZE = 500 -- Taille de la table pour bombe réseau
+local NETWORK_BOMB_TRIES = 3       -- Nombre d'envois par boucle
+local INSTANCE_SPAM_DELAY = 0.005  -- Délai réduit pour spam d'instances
+local CUBE_SPAWN_DELAY = 0.005     -- Délai réduit pour spawn de pièces cubiques
+local ITEM_SPAM_DELAY = 0.005      -- Délai réduit pour spam d'items
+local ITEM_SPAM_NUM_TOOLS = 50     -- Nombre d'outils dummy à créer
+local PHYSICS_STRESS = true        -- Active les calculs physiques pour cubes
 
 -- ======================
--- Setup RemoteEven
+-- Setup RemoteEvent (local)
 -- ======================
 local remote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
 if not remote then
     remote = Instance.new("RemoteEvent")
     remote.Name = REMOTE_NAME
     remote.Parent = ReplicatedStorage
+    print("StressTestHUD: RemoteEvent créé - " .. REMOTE_NAME)
 end
 
 -- ======================
--- UI
+-- UI (basé sur la première version)
 -- ======================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "StressTestHUD_Final"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+print("StressTestHUD: ScreenGui créé")
 
 local function newButton(parent, text, size, pos, color, textSize)
     local btn = Instance.new("TextButton")
@@ -69,10 +71,11 @@ local function newButton(parent, text, size, pos, color, textSize)
     local corner = Instance.new("UICorner", btn)
     corner.CornerRadius = UDim.new(0,8)
     btn.Parent = parent
+    print("StressTestHUD: Bouton créé - " .. text)
     return btn
 end
 
--- container
+-- HUD container
 local hud = Instance.new("Frame", screenGui)
 hud.Name = "HUD"
 hud.Size = UDim2.new(0,360,0,500)
@@ -81,9 +84,11 @@ hud.BackgroundColor3 = Color3.fromRGB(30,28,45)
 hud.BorderSizePixel = 0
 hud.Visible = true
 Instance.new("UICorner", hud).CornerRadius = UDim.new(0,14)
+print("StressTestHUD: HUD Frame créé")
 
--- toggle
+-- Floating HUD toggle
 local hudToggle = newButton(screenGui, "HUD", UDim2.new(0,48,0,48), UDim2.new(0,8,0,10), Color3.fromRGB(80,50,120), 14)
+print("StressTestHUD: Bouton HUD toggle créé")
 
 -- Title
 local title = Instance.new("TextLabel", hud)
@@ -94,6 +99,7 @@ title.Text = "StressTestHUD (private - crash opti)"
 title.TextColor3 = Color3.fromRGB(220,220,220)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
+print("StressTestHUD: Titre créé")
 
 -- Controls
 local startBtn    = newButton(hud, "Start Test", UDim2.new(0,280,0,40), UDim2.new(0.06,0,0,40), Color3.fromRGB(150,40,180), 18)
@@ -118,10 +124,9 @@ infoLabel.Font = Enum.Font.SourceSans
 infoLabel.TextSize = 14
 infoLabel.TextWrapped = true
 infoLabel.Text = "Events/sec: 0 | State: Idle\nRemoteEvents: ? | ClickDetectors: ?\nInstances Created: 0 | Bombs Sent: 0\nCubes Spawned: 0 | Items Spammed: 0 | FPS: ?"
+print("StressTestHUD: InfoLabel créé")
 
-closeBtn.MouseButton1Click:Connect(function() hud.Visible = false end)
-hudToggle.MouseButton1Click:Connect(function() hud.Visible = not hud.Visible end)
-
+-- Draggable HUD
 do
     local dragging, dragStart, startPos
     hud.InputBegan:Connect(function(input)
@@ -142,8 +147,32 @@ do
     end)
 end
 
+-- Draggable HUD Toggle
+do
+    local dragging, dragStart, startPos
+    hudToggle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = hudToggle.Position
+        end
+    end)
+    hudToggle.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            hudToggle.Position = UDim2.new(0, startPos.X.Offset + delta.X, 0, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+closeBtn.MouseButton1Click:Connect(function() hud.Visible = false print("StressTestHUD: HUD fermé") end)
+hudToggle.MouseButton1Click:Connect(function() hud.Visible = not hud.Visible print("StressTestHUD: HUD toggle - Visible = " .. tostring(hud.Visible)) end)
+
 -- ======================
--- State/logic
+-- State & logic
 -- ======================
 local running = false
 local heartbeatConn = nil
@@ -161,7 +190,7 @@ local clickCountCached = 0
 
 local function safeCountRemotes()
     local count = 0
-    for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
+    for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
         if v:IsA("RemoteEvent") then count = count + 1 end
     end
     return count
@@ -169,7 +198,7 @@ end
 
 local function safeCountClickDetectors()
     local count = 0
-    for _,v in ipairs(Workspace:GetDescendants()) do
+    for _, v in ipairs(Workspace:GetDescendants()) do
         if v:IsA("ClickDetector") then count = count + 1 end
     end
     return count
@@ -202,6 +231,7 @@ local function emergencyStop(reason)
     warn("StressTestHUD: Emergency stop triggered - "..tostring(reason))
 end
 
+-- Cleanup function for all stress instances, cubes, and items
 local function cleanupAll()
     pcall(function()
         for _, v in ipairs(Workspace:GetChildren()) do
@@ -225,9 +255,11 @@ local function cleanupAll()
         cubesSpawned = 0
         itemsSpammed = 0
         updateInfoLabel()
+        print("StressTestHUD: Nettoyage effectué")
     end)
 end
 
+-- Logique d'instance spam optimisée (surcharge mémoire serveur)
 local function runInstanceSpam()
     coroutine.wrap(function()
         while running and ALLOW_INSTANCE_SPAM do
@@ -255,32 +287,40 @@ local function runInstanceSpam()
     end)()
 end
 
+-- Logique de spawn de pièces cubiques (corrigée)
 local function runCubeSpawn()
     coroutine.wrap(function()
         while running and ALLOW_CUBE_SPAWN do
             local char = player.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    pcall(function()
-                        local cube = Instance.new("Part")
-                        cube.Name = "StressTestCube"
-                        cube.Size = Vector3.new(1, 1, 1)
-                        cube.Position = hrp.Position + Vector3.new(math.random(-5, 5), 10, math.random(-5, 5))
-                        cube.Anchored = not PHYSICS_STRESS
-                        cube.BrickColor = BrickColor.Random()
-                        if PHYSICS_STRESS then
-                            cube.CanCollide = true
-                            local bodyVelocity = Instance.new("BodyVelocity")
-                            bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                            bodyVelocity.Velocity = Vector3.new(math.random(-50, 50), math.random(-50, 50), math.random(-50, 50))
-                            bodyVelocity.Parent = cube
-                        end
-                        cube.Parent = Workspace
-                        cubesSpawned = cubesSpawned + 1
-                    end)
-                end
+            if not char then
+                print("StressTestHUD: Cube Spawn - Personnage non chargé, attente...")
+                task.wait(0.1)
+                continue
             end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                print("StressTestHUD: Cube Spawn - HumanoidRootPart non trouvé, attente...")
+                task.wait(0.1)
+                continue
+            end
+            pcall(function()
+                local cube = Instance.new("Part")
+                cube.Name = "StressTestCube"
+                cube.Size = Vector3.new(1, 1, 1)
+                cube.Position = hrp.Position + Vector3.new(math.random(-5, 5), 10, math.random(-5, 5))
+                cube.Anchored = not PHYSICS_STRESS
+                cube.BrickColor = BrickColor.Random()
+                if PHYSICS_STRESS then
+                    cube.CanCollide = true
+                    local bodyVelocity = Instance.new("BodyVelocity")
+                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000) -- Réduit pour éviter erreurs
+                    bodyVelocity.Velocity = Vector3.new(math.random(-20, 20), math.random(-20, 20), math.random(-20, 20))
+                    bodyVelocity.Parent = cube
+                end
+                cube.Parent = Workspace
+                cubesSpawned = cubesSpawned + 1
+                print("StressTestHUD: Cube créé - Total: " .. cubesSpawned)
+            end)
             task.wait(CUBE_SPAWN_DELAY)
             if cubesSpawned >= 10000 then
                 emergencyStop("cube spawn limit reached (10000)")
@@ -290,6 +330,7 @@ local function runCubeSpawn()
     end)()
 end
 
+-- Logique de spam d'items
 local function runItemSpam()
     coroutine.wrap(function()
         for i = 1, ITEM_SPAM_NUM_TOOLS do
@@ -301,6 +342,7 @@ local function runItemSpam()
                 handle.Size = Vector3.new(1, 1, 1)
                 handle.Parent = tool
                 tool.Parent = player.Backpack
+                print("StressTestHUD: Outil créé - StressTestTool_" .. i)
             end)
         end
 
@@ -312,6 +354,7 @@ local function runItemSpam()
                         if player.Character and player.Character:FindFirstChild("Humanoid") then
                             player.Character.Humanoid:EquipTool(tool)
                             itemsSpammed = itemsSpammed + 1
+                            print("StressTestHUD: Outil équipé - " .. tool.Name)
                         end
                     end)
                     task.wait(ITEM_SPAM_DELAY)
@@ -319,6 +362,7 @@ local function runItemSpam()
                         if player.Character and player.Character:FindFirstChild("Humanoid") then
                             player.Character.Humanoid:UnequipTools()
                             itemsSpammed = itemsSpammed + 1
+                            print("StressTestHUD: Outils déséquipés")
                         end
                     end)
                 end
@@ -332,7 +376,7 @@ local function runItemSpam()
     end)()
 end
 
--- Logique de network bomb optimisée (surcharge réseau serveur)
+-- Logique de network bomb
 local function runNetworkBomb()
     coroutine.wrap(function()
         while running and ALLOW_NETWORK_BOMB do
@@ -387,6 +431,7 @@ local function startTest()
     startBtn.Text = "Stop Test"
     updateDebugCounts()
     updateInfoLabel()
+    print("StressTestHUD: Test démarré")
 
     local cfg = LEVELS[currentLevel]
     ALLOW_INSTANCE_SPAM = cfg.instanceSpam
@@ -429,114 +474,4 @@ local function startTest()
 
         if tick() - lastReset >= 1 then
             if EMERGENCY_THRESHOLD_PER_SEC > 0 and eventsSentThisSecond >= EMERGENCY_THRESHOLD_PER_SEC then
-                emergencyStop(("events/sec %d >= threshold %d"):format(eventsSentThisSecond, EMERGENCY_THRESHOLD_PER_SEC))
-                return
-            end
-            if debugMode then updateDebugCounts() end
-            updateInfoLabel()
-            eventsSentThisSecond = 0
-            lastReset = tick()
-        end
-
-        if MAX_RUNTIME_SECONDS > 0 and tick() - startTime >= MAX_RUNTIME_SECONDS then
-            emergencyStop(("max runtime %ds reached"):format(MAX_RUNTIME_SECONDS))
-            return
-        end
-    end)
-end
-
-local function stopTest()
-    running = false
-    if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
-    startBtn.Text = "Start Test"
-    updateDebugCounts()
-    updateInfoLabel()
-end
-
-local debugUpdaterThread = coroutine.create(function()
-    while true do
-        if debugMode then
-            updateDebugCounts()
-            updateInfoLabel()
-        end
-        task.wait(0.5)
-    end
-end)
-coroutine.resume(debugUpdaterThread)
-
--- ======================
--- UI events
--- ======================
-startBtn.MouseButton1Click:Connect(function()
-    if running then stopTest() else startTest() end
-end)
-
-levelBtn.MouseButton1Click:Connect(function()
-    if currentLevel == "Easy" then currentLevel = "Mid"
-    elseif currentLevel == "Mid" then currentLevel = "Hard"
-    elseif currentLevel == "Hard" then currentLevel = "Crash"
-    else currentLevel = "Easy" end
-    levelBtn.Text = "Level: "..currentLevel
-    updateDebugCounts()
-    updateInfoLabel()
-end)
-
-fireBtn.MouseButton1Click:Connect(function()
-    ALLOW_FIRE = not ALLOW_FIRE
-    fireBtn.Text = "FireClick: "..tostring(ALLOW_FIRE)
-    updateInfoLabel()
-end)
-
-consoleBtn.MouseButton1Click:Connect(function()
-    consoleSpam = not consoleSpam
-    consoleBtn.Text = "Console Spam: "..(consoleSpam and "ON" or "OFF")
-    updateInfoLabel()
-end)
-
-debugBtn.MouseButton1Click:Connect(function()
-    debugMode = not debugMode
-    debugBtn.Text = "Debug: "..(debugMode and "ON" or "OFF")
-    updateDebugCounts()
-    updateInfoLabel()
-end)
-
-instanceBtn.MouseButton1Click:Connect(function()
-    ALLOW_INSTANCE_SPAM = not ALLOW_INSTANCE_SPAM
-    instanceBtn.Text = "Instance Spam: "..(ALLOW_INSTANCE_SPAM and "ON" or "OFF")
-    if running and ALLOW_INSTANCE_SPAM then runInstanceSpam() end
-    updateInfoLabel()
-end)
-
-networkBtn.MouseButton1Click:Connect(function()
-    ALLOW_NETWORK_BOMB = not ALLOW_NETWORK_BOMB
-    networkBtn.Text = "Network Bomb: "..(ALLOW_NETWORK_BOMB and "ON" or "OFF")
-    if running and ALLOW_NETWORK_BOMB then runNetworkBomb() end
-    updateInfoLabel()
-end)
-
-cubeSpawnBtn.MouseButton1Click:Connect(function()
-    ALLOW_CUBE_SPAWN = not ALLOW_CUBE_SPAWN
-    cubeSpawnBtn.Text = "Cube Spawn: "..(ALLOW_CUBE_SPAWN and "ON" or "OFF")
-    if running and ALLOW_CUBE_SPAWN then runCubeSpawn() end
-    updateInfoLabel()
-end)
-
-itemSpamBtn.MouseButton1Click:Connect(function()
-    ALLOW_ITEM_SPAM = not ALLOW_ITEM_SPAM
-    itemSpamBtn.Text = "Item Spam: "..(ALLOW_ITEM_SPAM and "ON" or "OFF")
-    if running and ALLOW_ITEM_SPAM then runItemSpam() end
-    updateInfoLabel()
-end)
-
-emergencyBtn.MouseButton1Click:Connect(function()
-    emergencyStop("manual emergency pressed")
-end)
-
-cleanupBtn.MouseButton1Click:Connect(function()
-    cleanupAll()
-end)
-
--- init
-updateDebugCounts()
-updateInfoLabel()
-print("StressTestHUD_Final loaded — use with responsability")
+                emergencyStop(("events/sec 
