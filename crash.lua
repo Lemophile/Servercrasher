@@ -10,36 +10,60 @@ local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local playerGui = nil
+
+-- Vérification robuste de PlayerGui
+local function waitForPlayerGui()
+    local attempts = 0
+    local maxAttempts = 10
+    local waitTime = 0.5
+    while attempts < maxAttempts do
+        playerGui = player:FindFirstChild("PlayerGui")
+        if playerGui then
+            print("StressTestHUD: PlayerGui trouvé")
+            return true
+        end
+        attempts = attempts + 1
+        warn("StressTestHUD: PlayerGui non trouvé, tentative " .. attempts .. "/" .. maxAttempts)
+        task.wait(waitTime)
+    end
+    warn("StressTestHUD: Échec de la récupération de PlayerGui après " .. maxAttempts .. " tentatives")
+    return false
+end
+
+if not waitForPlayerGui() then
+    warn("StressTestHUD: Impossible de charger le HUD. Assurez-vous que ce script est injecté comme LocalScript.")
+    return
+end
 
 -- ======================
 -- CONFIG
 -- ======================
-local REMOTE_NAME = "TestEvent" -- Remote cible (sera créé s'il n'existe pas)
+local REMOTE_NAME = "TestEvent"
 local LEVELS = {
     Easy = {eventsPerHeartbeat = 10,  fireClick = false, consoleSpam = false, instanceSpam = false, networkBomb = false, cubeSpawn = false, itemSpam = false},
     Mid  = {eventsPerHeartbeat = 100, fireClick = true,  consoleSpam = true,  instanceSpam = false, networkBomb = false, cubeSpawn = false, itemSpam = false},
     Hard = {eventsPerHeartbeat = 500, fireClick = true,  consoleSpam = true,  instanceSpam = true,  networkBomb = true,  cubeSpawn = true,  itemSpam = true},
-    Crash= {eventsPerHeartbeat = 1000,fireClick = true,  consoleSpam = true,  instanceSpam = true,  networkBomb = true,  cubeSpawn = true,  itemSpam = true}, -- Niveau pour crash intensif
+    Crash= {eventsPerHeartbeat = 1000,fireClick = true,  consoleSpam = true,  instanceSpam = true,  networkBomb = true,  cubeSpawn = true,  itemSpam = true},
 }
-local currentLevel = "Mid"     -- Valeur initiale: "Easy", "Mid", "Hard", "Crash"
-local ALLOW_FIRE = true        -- Permet fireclickdetector si true
-local ALLOW_INSTANCE_SPAM = false -- Toggle pour spam d'instances
-local ALLOW_NETWORK_BOMB = false  -- Toggle pour bombe réseau
-local ALLOW_CUBE_SPAWN = false    -- Toggle pour spawn de pièces cubiques
-local ALLOW_ITEM_SPAM = false     -- Toggle pour spam d'items
-local EMERGENCY_THRESHOLD_PER_SEC = 15000 -- Seuil local pour arrêt automatique
-local MAX_RUNTIME_SECONDS = 30    -- Limite à 30s pour éviter surcharge prolongée
-local NETWORK_BOMB_TABLE_SIZE = 500 -- Taille de la table pour bombe réseau
-local NETWORK_BOMB_TRIES = 3       -- Nombre d'envois par boucle
-local INSTANCE_SPAM_DELAY = 0.005  -- Délai réduit pour spam d'instances
-local CUBE_SPAWN_DELAY = 0.005     -- Délai réduit pour spawn de pièces cubiques
-local ITEM_SPAM_DELAY = 0.005      -- Délai réduit pour spam d'items
-local ITEM_SPAM_NUM_TOOLS = 50     -- Nombre d'outils dummy à créer
-local PHYSICS_STRESS = true        -- Active les calculs physiques pour cubes
+local currentLevel = "Mid"
+local ALLOW_FIRE = true
+local ALLOW_INSTANCE_SPAM = false
+local ALLOW_NETWORK_BOMB = false
+local ALLOW_CUBE_SPAWN = false
+local ALLOW_ITEM_SPAM = false
+local EMERGENCY_THRESHOLD_PER_SEC = 15000
+local MAX_RUNTIME_SECONDS = 30
+local NETWORK_BOMB_TABLE_SIZE = 500
+local NETWORK_BOMB_TRIES = 3
+local INSTANCE_SPAM_DELAY = 0.005
+local CUBE_SPAWN_DELAY = 0.01 -- Augmenté légèrement pour éviter surcharge
+local ITEM_SPAM_DELAY = 0.005
+local ITEM_SPAM_NUM_TOOLS = 50
+local PHYSICS_STRESS = true
 
 -- ======================
--- Setup RemoteEvent (local)
+-- Setup RemoteEvent
 -- ======================
 local remote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
 if not remote then
@@ -50,7 +74,7 @@ if not remote then
 end
 
 -- ======================
--- UI (basé sur la première version)
+-- UI (basé sur la première version fonctionnelle)
 -- ======================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "StressTestHUD_Final"
@@ -231,7 +255,7 @@ local function emergencyStop(reason)
     warn("StressTestHUD: Emergency stop triggered - "..tostring(reason))
 end
 
--- Cleanup function for all stress instances, cubes, and items
+-- Cleanup function
 local function cleanupAll()
     pcall(function()
         for _, v in ipairs(Workspace:GetChildren()) do
@@ -259,7 +283,7 @@ local function cleanupAll()
     end)
 end
 
--- Logique d'instance spam optimisée (surcharge mémoire serveur)
+-- Logique d'instance spam
 local function runInstanceSpam()
     coroutine.wrap(function()
         while running and ALLOW_INSTANCE_SPAM do
@@ -303,7 +327,7 @@ local function runCubeSpawn()
                 task.wait(0.1)
                 continue
             end
-            pcall(function()
+            local success, errorMsg = pcall(function()
                 local cube = Instance.new("Part")
                 cube.Name = "StressTestCube"
                 cube.Size = Vector3.new(1, 1, 1)
@@ -313,7 +337,7 @@ local function runCubeSpawn()
                 if PHYSICS_STRESS then
                     cube.CanCollide = true
                     local bodyVelocity = Instance.new("BodyVelocity")
-                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000) -- Réduit pour éviter erreurs
+                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
                     bodyVelocity.Velocity = Vector3.new(math.random(-20, 20), math.random(-20, 20), math.random(-20, 20))
                     bodyVelocity.Parent = cube
                 end
@@ -321,6 +345,9 @@ local function runCubeSpawn()
                 cubesSpawned = cubesSpawned + 1
                 print("StressTestHUD: Cube créé - Total: " .. cubesSpawned)
             end)
+            if not success then
+                warn("StressTestHUD: Erreur dans Cube Spawn - " .. tostring(errorMsg))
+            end
             task.wait(CUBE_SPAWN_DELAY)
             if cubesSpawned >= 10000 then
                 emergencyStop("cube spawn limit reached (10000)")
@@ -472,6 +499,4 @@ local function startTest()
             end
         end
 
-        if tick() - lastReset >= 1 then
-            if EMERGENCY_THRESHOLD_PER_SEC > 0 and eventsSentThisSecond >= EMERGENCY_THRESHOLD_PER_SEC then
-                emergencyStop(("events/sec 
+    
